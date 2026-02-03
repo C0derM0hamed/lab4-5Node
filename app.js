@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import dbConnect from "./Database/dbConnect.js";
 import postModel from "./Database/Models/post.model.js";

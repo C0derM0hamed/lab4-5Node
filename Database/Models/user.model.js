@@ -27,6 +27,12 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    confirmationToken: {
+        type: String
+    },
+    confirmationTokenExpires: {
+        type: Date
+    },
     role: {
         type: String,
         enum: ["user", "admin"],

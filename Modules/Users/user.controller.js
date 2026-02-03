@@ -1,13 +1,40 @@
 import userModel from "../../Database/Models/user.model.js"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
+import crypto from "crypto"
+import { sendEmail, confirmEmailTemplate } from "../../Utils/sendEmail.js"
 
 
 const signup = async (req,res) => {
-    req.body.password = bcrypt.hashSync(req.body.password, 8)
-    let addUser = await userModel.insertMany(req.body) 
-    addUser[0].password = undefined 
-    res.status(201).json({message: "created", data: addUser})
+    try {
+        req.body.password = bcrypt.hashSync(req.body.password, 8)
+        
+        // Generate confirmation token
+        const confirmationToken = crypto.randomBytes(32).toString('hex')
+        const confirmationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+        
+        req.body.confirmationToken = confirmationToken
+        req.body.confirmationTokenExpires = confirmationTokenExpires
+        
+        let addUser = await userModel.insertMany(req.body) 
+        
+        // Send confirmation email
+        const confirmLink = `http://localhost:${process.env.Port || 3000}/confirm/${confirmationToken}`
+        const html = confirmEmailTemplate(addUser[0].name, confirmLink)
+        
+        await sendEmail({
+            to: addUser[0].email,
+            subject: "Confirm Your Email",
+            html
+        })
+        
+        addUser[0].password = undefined 
+        addUser[0].confirmationToken = undefined
+        res.status(201).json({message: "Account created! Please check your email to confirm.", data: addUser})
+    } catch (error) {
+        console.error('Signup error:', error)
+        res.status(500).json({message: "Error creating account", error: error.message})
+    }
 }
 
 
@@ -32,8 +59,34 @@ const signin  =  async (req,res) => {
 }
 
 
+const confirmEmail = async (req, res) => {
+    try {
+        const { token } = req.params
+        
+        const user = await userModel.findOne({
+            confirmationToken: token,
+            confirmationTokenExpires: { $gt: Date.now() }
+        })
+        
+        if (!user) {
+            return res.status(400).json({ message: "Invalid or expired confirmation token" })
+        }
+        
+        user.isConfirmed = true
+        user.confirmationToken = undefined
+        user.confirmationTokenExpires = undefined
+        await user.save()
+        
+        res.status(200).json({ message: "Email confirmed successfully! You can now login." })
+    } catch (error) {
+        console.error('Confirm email error:', error)
+        res.status(500).json({ message: "Error confirming email", error: error.message })
+    }
+}
+
 
 export {
     signup,
-    signin
+    signin,
+    confirmEmail
 }
